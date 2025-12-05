@@ -1,6 +1,12 @@
-<template>  
+<template>
+  <!-- TODO: refactor this component, it's too big -->
+  <!-- TODO: split into multiple components -->
+  <!-- TODO: add proper routing -->
+  
   <div id="app" :style="{ padding: '20px', maxWidth: p === 'admin' ? '1200px' : '900px', margin: '0 auto', background: 'white', minHeight: '100vh' }">
-        <div :style="{ borderBottom: '2px solid #333', paddingBottom: '10px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }">
+    
+    <!-- Navigation très basique et bricolée -->
+    <div :style="{ borderBottom: '2px solid #333', paddingBottom: '10px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }">
       <h1 :style="{ color: '#333', fontSize: currentPage === 'login' ? '32px' : '28px' }">
         📚 Bookstore {{ userName ? '- Bonjour ' + userName : '' }}
       </h1>
@@ -25,6 +31,8 @@
         </button>
       </div>
     </div>
+
+    <!-- Page de login -->
     <div v-if="currentPage === 'login'" :style="{ padding: '20px', background: '#f8f9fa', borderRadius: '5px' }">
       <h2>Connexion</h2>
       <div :style="{ marginTop: '20px' }">
@@ -38,6 +46,8 @@
         </div>
       </div>
     </div>
+
+    <!-- Page de register -->
     <div v-if="currentPage === 'register'" :style="{ padding: '20px', background: '#f8f9fa', borderRadius: '5px' }">
       <h2>Créer un compte</h2>
       <div :style="{ marginTop: '20px' }">
@@ -48,13 +58,17 @@
         </button>
       </div>
     </div>
+
+    <!-- Page produits -->
     <div v-if="currentPage === 'products'">
       <div :style="{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }">
         <h2>Liste des Livres</h2>
         <button @click="loadProducts" :style="{ background: '#6c757d' }">
           Recharger la liste
         </button>
-      </div>     
+      </div>
+      
+      <!-- Liste des produits sans loader -->
       <div v-if="products.length === 0" :style="{ padding: '20px', textAlign: 'center', color: '#666' }">
         Aucun produit...
       </div>
@@ -77,6 +91,7 @@
           <p :style="{ fontWeight: 'bold', fontSize: '20px', color: '#28a745', marginBottom: '10px' }">
             {{ product.price }}€
           </p>
+          <!-- v-html sans sanitization (MAUVAISE PRATIQUE) -->
           <div v-html="product.description" :style="{ fontSize: '12px', color: '#666', marginBottom: '10px' }"></div>
           <p :style="{ fontSize: '12px', color: product.stock > 5 ? 'green' : 'red' }">
             Stock: {{ product.stock }}
@@ -89,6 +104,8 @@
           </button>
         </div>
       </div>
+
+      <!-- Détail du produit sélectionné -->
       <div v-if="selectedProduct" :style="{ 
         position: 'fixed', 
         top: '50%', 
@@ -121,6 +138,8 @@
         zIndex: 999
       }"></div>
     </div>
+
+    <!-- Page panier -->
     <div v-if="currentPage === 'cart'">
       <h2>Mon Panier</h2>
       
@@ -177,6 +196,8 @@
         </div>
       </div>
     </div>
+
+    <!-- Page admin (accessible sans vraie vérification) -->
     <div v-if="currentPage === 'admin'" :style="{ padding: '20px', background: '#fff3cd', borderRadius: '5px' }">
       <h2 :style="{ color: '#856404' }">🔧 Admin Panel</h2>
       <p :style="{ color: '#856404', marginBottom: '20px' }">
@@ -202,6 +223,8 @@
         </button>
       </div>
     </div>
+
+    <!-- Message de debug -->
     <div v-if="debugMessage" :style="{ 
       position: 'fixed', 
       bottom: '20px', 
@@ -229,8 +252,9 @@ export default {
   setup() {
     console.log('Setup function called')
     
+    // Variables d'état mélangées sans organisation claire
     const currentPage = ref('products')
-    const p = ref('products')
+    const p = ref('products') // Variable mal nommée (MAUVAISE PRATIQUE)
     const products = ref([])
     const selectedProduct = ref(null)
     const cartItems = ref([])
@@ -244,6 +268,7 @@ export default {
     const cardNumber = ref('')
     const debugMessage = ref('')
     
+    // Objet pour le nouveau produit admin
     const newProduct = ref({
       title: '',
       author: '',
@@ -252,10 +277,12 @@ export default {
       stock: 0
     })
 
+    // URL de l'API en dur (MAUVAISE PRATIQUE)
     const API_URL = 'http://localhost:3000'
 
     console.log('Variables initialized')
 
+    // Charger le token depuis localStorage (non sécurisé)
     onMounted(() => {
       console.log('Component mounted')
       const savedToken = localStorage.getItem('token')
@@ -267,16 +294,19 @@ export default {
         console.log('Token loaded from localStorage:', savedToken)
       }
       
+      // Charger les produits au montage
       loadProducts()
       
       console.log('Initial load complete')
     })
 
+    // Computed property lourde avec calculs inutiles (MAUVAISE PRATIQUE)
     const cartItemCount = computed(() => {
       console.log('Computing cart item count...')
       let count = 0
       for (let i = 0; i < cartItems.value.length; i++) {
         count += cartItems.value[i].quantity
+        // Calcul inutile pour ralentir
         for (let j = 0; j < 1000; j++) {
           Math.sqrt(j)
         }
@@ -285,6 +315,7 @@ export default {
       return count
     })
 
+    // Computed property pour le total du panier
     const cartTotal = computed(() => {
       console.log('Computing cart total...')
       let total = 0
@@ -295,10 +326,12 @@ export default {
       return total
     })
 
+    // Watcher très large qui se déclenche trop souvent (MAUVAISE PRATIQUE)
     watch(currentPage, (newVal, oldVal) => {
       console.log('Page changed from', oldVal, 'to', newVal)
       p.value = newVal
       
+      // Recharger les produits à chaque changement de page (inutile - MAUVAISE PRATIQUE)
       if (newVal === 'products') {
         console.log('Reloading products because page changed...')
         loadProducts()
@@ -310,18 +343,23 @@ export default {
       }
     })
 
+    // Watcher sur les produits qui recharge encore (MAUVAISE PRATIQUE)
     watch(products, () => {
       console.log('Products changed, length:', products.value.length)
+      // Faire quelque chose d'inutile
       products.value.forEach(p => {
         console.log('Product:', p.title)
       })
     })
 
+    // Fonction pour charger les produits (appel API dupliqué partout)
     function loadProducts() {
       console.log('Loading products...')
       console.log('Fetching from:', API_URL + '/products')
       
+      // Pas de gestion de loader (MAUVAISE PRATIQUE)
       
+      // fetch dupliqué au lieu d'une fonction réutilisable (MAUVAISE PRATIQUE)
       fetch(API_URL + '/products')
         .then(response => {
           console.log('Response received:', response.status)
@@ -333,13 +371,15 @@ export default {
           console.log('Products loaded successfully')
         })
         .catch(error => {
-          console.log('Error loading products:', error)
+          console.log('Error loading products:', error) // Juste console.log (MAUVAISE PRATIQUE)
         })
     }
 
+    // Fonction pour voir le détail d'un produit
     function viewProductDetail(product) {
       console.log('Viewing product:', product.id)
       
+      // Refaire un appel API au lieu d'utiliser les données déjà chargées (MAUVAISE PRATIQUE)
       fetch(API_URL + '/products/' + product.id)
         .then(response => response.json())
         .then(data => {
@@ -351,13 +391,16 @@ export default {
         })
     }
 
+    // Fonction de login (duplication de code fetch)
     function doLogin() {
       console.log('Attempting login...')
       console.log('Email:', loginEmail.value)
-      console.log('Password:', loginPassword.value)
+      console.log('Password:', loginPassword.value) // Logger le password (TRÈS MAUVAISE PRATIQUE)
       
       loginError.value = ''
-            
+      
+      // Pas de validation (MAUVAISE PRATIQUE)
+      
       fetch(API_URL + '/login', {
         method: 'POST',
         headers: {
@@ -378,8 +421,9 @@ export default {
       })
       .then(data => {
         console.log('Login successful:', data)
-        console.log('Token:', data.token)
+        console.log('Token:', data.token) // Logger le token (MAUVAISE PRATIQUE)
         
+        // Stocker le token dans localStorage (non sécurisé - MAUVAISE PRATIQUE)
         token.value = data.token
         userName.value = data.user.email
         localStorage.setItem('token', data.token)
@@ -388,8 +432,10 @@ export default {
         debugMessage.value = 'Connecté !'
         setTimeout(() => { debugMessage.value = '' }, 2000)
         
+        // Changer de page
         currentPage.value = 'products'
         
+        // Charger le panier
         loadCart()
       })
       .catch(error => {
@@ -398,11 +444,14 @@ export default {
       })
     }
 
+    // Fonction de register (encore de la duplication)
     function doRegister() {
       console.log('Attempting registration...')
       console.log('Email:', regEmail.value)
-      console.log('Password:', regPassword.value)
-            
+      console.log('Password:', regPassword.value) // Logger le password (TRÈS MAUVAISE PRATIQUE)
+      
+      // Aucune validation (MAUVAISE PRATIQUE)
+      
       fetch(API_URL + '/register', {
         method: 'POST',
         headers: {
@@ -425,15 +474,17 @@ export default {
       })
     }
 
+    // Fonction pour ajouter au panier
     function addToCart(product) {
       console.log('Adding to cart:', product.id)
       
       if (!token.value) {
         console.log('No token, cannot add to cart')
-        alert('Vous devez être connecté')
+        alert('Vous devez être connecté') // alert au lieu d'un message UI propre (MAUVAISE PRATIQUE)
         return
       }
       
+      // Duplication de code fetch (MAUVAISE PRATIQUE)
       fetch(API_URL + '/cart/add', {
         method: 'POST',
         headers: {
@@ -451,6 +502,7 @@ export default {
         debugMessage.value = 'Produit ajouté !'
         setTimeout(() => { debugMessage.value = '' }, 2000)
         
+        // Recharger le panier immédiatement (appel API inutile - MAUVAISE PRATIQUE)
         loadCart()
       })
       .catch(error => {
@@ -458,6 +510,7 @@ export default {
       })
     }
 
+    // Fonction pour charger le panier
     function loadCart() {
       console.log('Loading cart...')
       
@@ -481,10 +534,13 @@ export default {
       })
     }
 
+    // Fonction de paiement
     function doPayment() {
       console.log('Processing payment...')
-      console.log('Card number:', cardNumber.value)
-            
+      console.log('Card number:', cardNumber.value) // Logger les données sensibles (TRÈS MAUVAISE PRATIQUE)
+      
+      // Pas de validation du numéro de carte (MAUVAISE PRATIQUE)
+      
       fetch(API_URL + '/payment', {
         method: 'POST',
         headers: {
@@ -499,8 +555,9 @@ export default {
       .then(response => response.json())
       .then(data => {
         console.log('Payment successful:', data)
-        alert('Paiement réussi ! Commande: ' + data.orderId)
+        alert('Paiement réussi ! Commande: ' + data.orderId) // alert (MAUVAISE PRATIQUE)
         
+        // Vider le panier local
         cartItems.value = []
         cardNumber.value = ''
         
@@ -512,10 +569,14 @@ export default {
       })
     }
 
+    // Fonction pour créer un produit (admin)
     function createProduct() {
       console.log('Creating product...')
       console.log('Product data:', newProduct.value)
-            
+      
+      // Pas de validation (MAUVAISE PRATIQUE)
+      // Pas de vérification du rôle réel (MAUVAISE PRATIQUE)
+      
       fetch(API_URL + '/admin/products', {
         method: 'POST',
         headers: {
@@ -524,14 +585,15 @@ export default {
         },
         body: JSON.stringify({
           ...newProduct.value,
-          role: 'admin'
+          role: 'admin' // Passer le rôle en clair (TRÈS MAUVAISE PRATIQUE)
         })
       })
       .then(response => response.json())
       .then(data => {
         console.log('Product created:', data)
-        alert('Produit créé avec succès !')
+        alert('Produit créé avec succès !') // alert (MAUVAISE PRATIQUE)
         
+        // Reset du formulaire
         newProduct.value = {
           title: '',
           author: '',
@@ -540,6 +602,7 @@ export default {
           stock: 0
         }
         
+        // Recharger les produits
         loadProducts()
       })
       .catch(error => {
@@ -548,6 +611,7 @@ export default {
       })
     }
 
+    // Fonction logout
     function logout() {
       console.log('Logging out...')
       token.value = null
@@ -559,6 +623,7 @@ export default {
       console.log('Logged out')
     }
 
+    // Fonction pour changer de page
     function changePage(page) {
       console.log('Changing page to:', page)
       currentPage.value = page
@@ -566,6 +631,7 @@ export default {
 
     console.log('Setup complete')
 
+    // Retourner toutes les variables et fonctions (liste très longue - MAUVAISE PRATIQUE)
     return {
       currentPage,
       p,
@@ -600,6 +666,8 @@ export default {
 </script>
 
 <style scoped>
+/* Quelques styles scoped mais mal organisés */
+/* TODO: move to external CSS file */
 
 #app {
   font-family: Arial, sans-serif;
@@ -614,6 +682,8 @@ button:hover {
   opacity: 0.8;
 }
 
+/* Style qui va potentiellement causer des conflits */
 div div div {
+  /* Sélecteur trop large */
 }
 </style>
