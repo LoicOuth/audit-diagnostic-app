@@ -1,0 +1,17 @@
+{
+  "name": "bookstore-frontend",
+  "version": "1.0.0",
+  "description": "A poorly designed bookstore frontend",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "vue": "^3.3.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.3.4",
+    "vite": "^4.4.9"
+  }
+}

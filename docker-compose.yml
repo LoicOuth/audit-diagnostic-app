@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  # Service Backend (API Express)
+  backend:
+    build: ./backend
+    container_name: bookstore-backend
+    ports:
+      - "3000:3000"
+    volumes:
+      # Volume pour persister la base SQLite
+      - ./backend/bookstore.db:/usr/src/app/bookstore.db
+    environment:
+      - NODE_ENV=development
+    networks:
+      - bookstore-network
+    restart: unless-stopped
+
+  # Service Frontend (Vue + Vite)
+  frontend:
+    build: ./frontend
+    container_name: bookstore-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - bookstore-network
+    restart: unless-stopped
+
+networks:
+  bookstore-network:
+    driver: bridge
