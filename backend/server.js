@@ -1,7 +1,3 @@
-// TODO: refactor this code later
-// TODO: add proper error handling
-// TODO: implement proper logging system
-
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -10,16 +6,13 @@ const { Client } = require('pg');
 const app = express();
 const PORT = 3000;
 
-// Middleware
 app.use(bodyParser.json());
 app.use(cors());
 
-// Variables globales pour stocker des états (MAUVAISE PRATIQUE)
-var userCarts = {}; // Paniers en mémoire
-var connectedUsers = []; // Liste des utilisateurs connectés
-var requestCount = 0; // Compteur de requêtes
+var userCarts = {};
+var connectedUsers = [];
+var requestCount = 0;
 
-// Configuration PostgreSQL (MAUVAISE PRATIQUE: credentials en dur)
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
@@ -30,15 +23,11 @@ const dbConfig = {
 
 console.log('PostgreSQL config loaded');
 
-// Fonction pour créer une nouvelle connexion à chaque fois (TRÈS MAUVAISE PRATIQUE)
-// Au lieu d'utiliser un Pool de connexions, on crée une nouvelle connexion pour chaque requête
-// Cela cause des problèmes de performance et de fuites de connexions
 function getDbConnection() {
   const client = new Client(dbConfig);
   return client;
 }
 
-// Test de connexion initial
 const testClient = getDbConnection();
 testClient.connect((err) => {
   if (err) {
@@ -55,8 +44,6 @@ testClient.connect((err) => {
   }
 });
 
-// Création des tables si elles n'existent pas (tout dans le même fichier)
-// Note: Ces requêtes utilisent aussi de nouvelles connexions (MAUVAISE PRATIQUE)
 const initClient1 = getDbConnection();
 initClient1.connect();
 initClient1.query(`
@@ -105,14 +92,12 @@ initClient3.query(`
   initClient3.end();
 });
 
-// Insérer quelques données de test si la table est vide
 setTimeout(() => {
   const checkClient = getDbConnection();
   checkClient.connect();
   checkClient.query('SELECT COUNT(*) as count FROM products', (err, result) => {
     if (!err && result.rows[0].count == 0) {
       console.log('Inserting test data...');
-      // Créer une nouvelle connexion pour chaque insertion (TRÈS MAUVAISE PRATIQUE)
       const insertClient1 = getDbConnection();
       insertClient1.connect();
       insertClient1.query("INSERT INTO products (title, author, price, description, stock) VALUES ('Clean Code', 'Robert C. Martin', 29.99, 'A Handbook of Agile Software Craftsmanship', 10)", () => insertClient1.end());
@@ -153,23 +138,19 @@ setTimeout(() => {
   });
 }, 1000);
 
-// Fonction utilitaire pour générer un token maison (TRÈS MAUVAISE PRATIQUE)
 function generateToken(email) {
-  // Token super simple : email + timestamp
   return email + '|' + Date.now();
 }
 
-// Fonction pour vérifier le token (naïve et non sécurisée)
 function verifyToken(token) {
   if (!token) return null;
   var parts = token.split('|');
   if (parts.length === 2) {
-    return parts[0]; // Retourne l'email
+    return parts[0];
   }
   return null;
 }
 
-// Simulation de charge CPU inutile (pour ralentir les performances)
 function wasteTime() {
   var result = 0;
   for (var i = 0; i < 10000000; i++) {
@@ -178,25 +159,16 @@ function wasteTime() {
   return result;
 }
 
-// ============= ROUTES =============
-
-// Route de base
 app.get('/', (req, res) => {
   console.log('Someone accessed the home route');
   res.send('Welcome to the Bookstore API');
 });
 
-// Liste des produits avec SELECT * et charge CPU inutile
 app.get('/products', (req, res) => {
   requestCount++;
   console.log('Getting products... Request #' + requestCount);
-  
-  // Simulation de charge CPU inutile (MAUVAISE PRATIQUE)
   console.log('Processing heavy computation...');
   var waste = wasteTime();
-  
-  // SELECT * sans filtre (MAUVAISE PRATIQUE)
-  // Créer une nouvelle connexion pour chaque requête (TRÈS MAUVAISE PRATIQUE)
   const client = getDbConnection();
   client.connect((connErr) => {
     if (connErr) {
@@ -204,7 +176,6 @@ app.get('/products', (req, res) => {
       res.status(500).send('Database connection error');
       return;
     }
-    
     client.query('SELECT * FROM products', (err, result) => {
       if (err) {
         console.log(err);
@@ -212,37 +183,28 @@ app.get('/products', (req, res) => {
         res.status(500).send('Database error');
         return;
       }
-      
-      // setTimeout inutile qui ralentit la réponse (MAUVAISE PRATIQUE)
       setTimeout(() => {
         console.log('Returning ' + result.rows.length + ' products');
         res.json(result.rows);
-        client.end(); // Fermer la connexion (mais c'est déjà trop tard, mauvaise perf)
+        client.end();
       }, 500);
     });
   });
 });
 
-// Détail d'un produit avec INJECTION SQL VOLONTAIRE (TRÈS MAUVAISE PRATIQUE)
 app.get('/products/:id', (req, res) => {
   var id = req.params.id;
   console.log('Getting product with id: ' + id);
-  
-  // Concaténation directe dans la requête SQL = INJECTION SQL POSSIBLE
   var query = "SELECT * FROM products WHERE id = " + id;
-  
-  // Nouvelle connexion pour chaque requête (MAUVAISE PRATIQUE)
   const client = getDbConnection();
   client.connect();
   client.query(query, (err, result) => {
     if (err) {
       console.log('Error:', err);
-      // Renvoyer la stack trace dans la réponse (MAUVAISE PRATIQUE)
       res.status(500).json({ error: err.message, stack: err.stack });
       client.end();
       return;
     }
-    
     if (result.rows.length > 0) {
       res.json(result.rows[0]);
     } else {
@@ -252,17 +214,10 @@ app.get('/products/:id', (req, res) => {
   });
 });
 
-// Register - mot de passe en clair (MAUVAISE PRATIQUE)
 app.post('/register', (req, res) => {
   var email = req.body.email;
   var password = req.body.password;
-  
   console.log('New registration attempt');
-  
-  // Aucune validation des entrées (MAUVAISE PRATIQUE)
-  // Pas de vérification si l'utilisateur existe déjà
-  
-  // Stockage du mot de passe en clair (TRÈS MAUVAISE PRATIQUE)
   const client = getDbConnection();
   client.connect();
   client.query("INSERT INTO users (email, password, role) VALUES ($1, $2, 'user') RETURNING id", 
@@ -274,7 +229,6 @@ app.post('/register', (req, res) => {
         client.end();
         return;
       }
-      
       console.log('User registered: ' + email);
       res.json({ message: 'User registered successfully', userId: result.rows[0].id });
       client.end();
@@ -282,16 +236,10 @@ app.post('/register', (req, res) => {
   );
 });
 
-// Login - authentification non sécurisée
 app.post('/login', (req, res) => {
   var email = req.body.email;
   var password = req.body.password;
-  
   console.log('Login attempt for: ' + email);
-  
-  // Pas de limite de tentatives (vulnérable au brute force)
-  
-  // Requête avec SELECT * (MAUVAISE PRATIQUE)
   const client = getDbConnection();
   client.connect();
   client.query("SELECT * FROM users WHERE email = $1 AND password = $2", 
@@ -303,20 +251,16 @@ app.post('/login', (req, res) => {
         client.end();
         return;
       }
-      
       if (result.rows.length > 0) {
         var row = result.rows[0];
-        // Générer un token maison non sécurisé (MAUVAISE PRATIQUE)
         var token = generateToken(email);
         connectedUsers.push(email);
-        
         console.log('Login successful for ' + email);
         console.log('Connected users:', connectedUsers);
-        
         res.json({ 
           message: 'Login successful', 
           token: token,
-          user: row // Renvoyer toutes les données utilisateur y compris le mot de passe (MAUVAISE PRATIQUE)
+          user: row
         });
       } else {
         console.log('Login failed for ' + email);
@@ -327,25 +271,16 @@ app.post('/login', (req, res) => {
   );
 });
 
-// Ajouter au panier - stockage en mémoire volatile
 app.post('/cart/add', (req, res) => {
   var token = req.headers.authorization;
   var productId = req.body.productId;
   var quantity = req.body.quantity;
-  
   console.log('Adding to cart...');
-  
-  // Vérification du token très basique
   var email = verifyToken(token);
   if (!email) {
     res.status(401).send('Unauthorized');
     return;
   }
-  
-  // Pas de validation de la quantité (MAUVAISE PRATIQUE)
-  
-  // Requête N+1 : on fait une requête pour chaque produit (MAUVAISE PRATIQUE)
-  // Et injection SQL possible (MAUVAISE PRATIQUE)
   const client = getDbConnection();
   client.connect();
   client.query("SELECT * FROM products WHERE id = " + productId, (err, result) => {
@@ -355,67 +290,49 @@ app.post('/cart/add', (req, res) => {
       client.end();
       return;
     }
-    
     if (result.rows.length === 0) {
       res.status(404).send('Product not found');
       client.end();
       return;
     }
-    
     var product = result.rows[0];
-    
-    // Initialiser le panier si nécessaire
     if (!userCarts[email]) {
       userCarts[email] = [];
     }
-    
-    // Ajouter au panier (en mémoire, sera perdu au redémarrage)
     userCarts[email].push({
       productId: productId,
       quantity: quantity,
       price: product.price,
       title: product.title
     });
-    
     console.log('Cart for ' + email + ':', userCarts[email]);
-    
     res.json({ message: 'Product added to cart', cart: userCarts[email] });
     client.end();
   });
 });
 
-// Voir le panier avec requêtes N+1
 app.get('/cart', (req, res) => {
   var token = req.headers.authorization;
-  
   console.log('Getting cart...');
-  
   var email = verifyToken(token);
   if (!email) {
     res.status(401).send('Unauthorized');
     return;
   }
-  
   var cart = userCarts[email] || [];
-  
-  // Problème N+1 : on refait une requête DB pour chaque item du panier (MAUVAISE PRATIQUE)
   var detailedCart = [];
   var processed = 0;
-  
   if (cart.length === 0) {
     res.json({ cart: [] });
     return;
   }
-  
   cart.forEach(function(item) {
-    // Nouvelle connexion pour chaque item (MAUVAISE PRATIQUE)
     const client = getDbConnection();
     client.connect();
     client.query("SELECT * FROM products WHERE id = " + item.productId, (err, result) => {
       if (err) {
         console.log(err);
       }
-      
       if (result && result.rows.length > 0) {
         var product = result.rows[0];
         detailedCart.push({
@@ -423,43 +340,32 @@ app.get('/cart', (req, res) => {
           currentStock: product.stock
         });
       }
-      
       processed++;
       client.end();
-      
       if (processed === cart.length) {
         var total = 0;
         detailedCart.forEach(function(item) {
           total += parseFloat(item.price) * item.quantity;
         });
-        
         res.json({ cart: detailedCart, total: total });
       }
     });
   });
 });
 
-// Route admin pour créer un produit - protection naïve
 app.post('/admin/products', (req, res) => {
   var token = req.headers.authorization;
-  var role = req.body.role; // Role passé dans le body (TRÈS MAUVAISE PRATIQUE)
-  
+  var role = req.body.role;
   console.log('Admin route accessed');
-  
-  // Vérification ultra naïve du rôle (MAUVAISE PRATIQUE)
   if (role !== 'admin') {
     res.status(403).send('Forbidden - Admin only');
     return;
   }
-  
   var title = req.body.title;
   var author = req.body.author;
   var price = req.body.price;
   var description = req.body.description;
   var stock = req.body.stock;
-  
-  // Aucune validation des données (MAUVAISE PRATIQUE)
-  
   const client = getDbConnection();
   client.connect();
   client.query(
@@ -472,7 +378,6 @@ app.post('/admin/products', (req, res) => {
         client.end();
         return;
       }
-      
       console.log('Product created with id: ' + result.rows[0].id);
       res.json({ message: 'Product created', productId: result.rows[0].id });
       client.end();
@@ -480,32 +385,20 @@ app.post('/admin/products', (req, res) => {
   );
 });
 
-// Endpoint de paiement avec faux Stripe
 app.post('/payment', (req, res) => {
   var token = req.headers.authorization;
   var cardNumber = req.body.cardNumber;
   var amount = req.body.amount;
-  
   console.log('Payment attempt');
-  console.log('Card number:', cardNumber); // Logger les données sensibles (MAUVAISE PRATIQUE)
-  
+  console.log('Card number:', cardNumber);
   var email = verifyToken(token);
   if (!email) {
     res.status(401).send('Unauthorized');
     return;
   }
-  
-  // Pas de validation du numéro de carte (MAUVAISE PRATIQUE)
-  // Pas de vérification du montant (MAUVAISE PRATIQUE)
-  
-  // Simulation d'appel à Stripe avec setTimeout
   setTimeout(function() {
-    // Toujours accepter le paiement (faux Stripe)
     var orderId = Math.random().toString(36).substring(7);
-    
     console.log('Payment successful for ' + email);
-    
-    // Enregistrer la commande
     const client = getDbConnection();
     client.connect();
     client.query(
@@ -515,10 +408,7 @@ app.post('/payment', (req, res) => {
         if (err) {
           console.log(err);
         }
-        
-        // Vider le panier
         userCarts[email] = [];
-        
         res.json({ 
           message: 'Payment successful', 
           orderId: orderId,
@@ -530,7 +420,6 @@ app.post('/payment', (req, res) => {
   }, 1000);
 });
 
-// Route de debug qui expose des informations sensibles (MAUVAISE PRATIQUE)
 app.get('/debug', (req, res) => {
   res.json({
     connectedUsers: connectedUsers,
@@ -541,13 +430,9 @@ app.get('/debug', (req, res) => {
   });
 });
 
-// Route avec duplication de code pour chercher un utilisateur
 app.get('/user/:email', (req, res) => {
   var email = req.params.email;
-  
   console.log('Getting user: ' + email);
-  
-  // Même logique que dans login mais dupliquée (MAUVAISE PRATIQUE)
   const client = getDbConnection();
   client.connect();
   client.query("SELECT * FROM users WHERE email = $1", [email], (err, result) => {
@@ -557,9 +442,7 @@ app.get('/user/:email', (req, res) => {
       client.end();
       return;
     }
-    
     if (result.rows.length > 0) {
-      // Renvoyer toutes les données y compris le mot de passe (MAUVAISE PRATIQUE)
       res.json(result.rows[0]);
     } else {
       res.status(404).send('User not found');
@@ -568,14 +451,7 @@ app.get('/user/:email', (req, res) => {
   });
 });
 
-// Pas de middleware de gestion d'erreurs centralisé
-// Pas de gestion des routes inexistantes
-
-// Démarrage du serveur
 app.listen(PORT, () => {
   console.log('Server is running on port ' + PORT);
   console.log('Environment: ' + (process.env.NODE_ENV || 'development'));
 });
-
-// Pas de gestion propre de l'arrêt du serveur
-// Pas de fermeture de la connexion DB
