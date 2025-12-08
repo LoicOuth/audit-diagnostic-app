@@ -5,17 +5,43 @@
 ## Installation
 
 ```bash
-cd back
+cd backend
 npm install
 ```
 
 ## Démarrage
+
+### Avec Docker (recommandé)
+
+```bash
+# À la racine du projet
+docker-compose up --build
+```
+
+### Sans Docker (développement local)
+
+1. Installez PostgreSQL localement
+2. Créez une base de données `bookstore`
+3. Configurez les variables d'environnement ou utilisez les valeurs par défaut :
+   - `DB_HOST=localhost`
+   - `DB_PORT=5432`
+   - `DB_NAME=bookstore`
+   - `DB_USER=bookstore_user`
+   - `DB_PASSWORD=bookstore_pass`
 
 ```bash
 npm start
 ```
 
 Le serveur démarre sur `http://localhost:3000`
+
+## Remplir la base avec des données de test
+
+Pour insérer 10 000 produits et 5 000 commandes :
+
+```bash
+node seed.js
+```
 
 ## Routes disponibles
 
@@ -67,11 +93,11 @@ curl -X POST http://localhost:3000/admin/products \
   -d '{"role":"admin","title":"New Book","author":"Author","price":19.99,"description":"Description","stock":10}'
 ```
 
-## Base de données
+## Structure de la base de données
 
-SQLite avec 3 tables :
-- `users` - Utilisateurs (avec mots de passe en clair)
+PostgreSQL avec 3 tables :
+- `users` - Utilisateurs (avec mots de passe en clair - MAUVAISE PRATIQUE)
 - `products` - Livres
 - `orders` - Commandes
 
-La base est créée automatiquement au démarrage avec des données de test.
+Les tables sont créées automatiquement au démarrage via `init.sql` avec des données de test.

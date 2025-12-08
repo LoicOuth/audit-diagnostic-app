@@ -1,3 +1,4 @@
 node_modules/
 bookstore.db
+bookstore.db-journal
 *.log

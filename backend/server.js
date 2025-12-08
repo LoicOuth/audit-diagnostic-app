@@ -5,8 +5,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
-const fs = require('fs');
+const { Client } = require('pg');
 
 const app = express();
 const PORT = 3000;
@@ -20,61 +19,139 @@ var userCarts = {}; // Paniers en mémoire
 var connectedUsers = []; // Liste des utilisateurs connectés
 var requestCount = 0; // Compteur de requêtes
 
-// Initialisation de la base de données SQLite
-const db = new sqlite3.Database('./bookstore.db', (err) => {
+// Configuration PostgreSQL (MAUVAISE PRATIQUE: credentials en dur)
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'bookstore',
+  user: process.env.DB_USER || 'bookstore_user',
+  password: process.env.DB_PASSWORD || 'bookstore_pass',
+};
+
+console.log('PostgreSQL config loaded');
+
+// Fonction pour créer une nouvelle connexion à chaque fois (TRÈS MAUVAISE PRATIQUE)
+// Au lieu d'utiliser un Pool de connexions, on crée une nouvelle connexion pour chaque requête
+// Cela cause des problèmes de performance et de fuites de connexions
+function getDbConnection() {
+  const client = new Client(dbConfig);
+  return client;
+}
+
+// Test de connexion initial
+const testClient = getDbConnection();
+testClient.connect((err) => {
   if (err) {
-    console.log('Error opening database', err);
+    console.log('Error connecting to database:', err);
+    testClient.end();
   } else {
-    console.log('Database connected');
+    console.log('Database connection test successful');
+    testClient.query('SELECT NOW()', (err, res) => {
+      if (!err) {
+        console.log('Database connected at:', res.rows[0].now);
+      }
+      testClient.end();
+    });
   }
 });
 
 // Création des tables si elles n'existent pas (tout dans le même fichier)
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+// Note: Ces requêtes utilisent aussi de nouvelles connexions (MAUVAISE PRATIQUE)
+const initClient1 = getDbConnection();
+initClient1.connect();
+initClient1.query(`
+  CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
     email TEXT,
     password TEXT,
     role TEXT
-  )`);
+  )
+`, (err) => {
+  if (err) console.log('Error creating users table:', err);
+  else console.log('Users table ready');
+  initClient1.end();
+});
 
-  db.run(`CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+const initClient2 = getDbConnection();
+initClient2.connect();
+initClient2.query(`
+  CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
     title TEXT,
     author TEXT,
-    price REAL,
+    price DECIMAL(10, 2),
     description TEXT,
     stock INTEGER
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_email TEXT,
-    total REAL,
-    status TEXT,
-    created_at TEXT
-  )`);
-
-  // Insérer quelques données de test
-  db.get("SELECT COUNT(*) as count FROM products", (err, row) => {
-    if (row.count === 0) {
-      console.log('Inserting test data...');
-      db.run("INSERT INTO products (title, author, price, description, stock) VALUES ('Clean Code', 'Robert C. Martin', 29.99, 'A Handbook of Agile Software Craftsmanship', 10)");
-      db.run("INSERT INTO products (title, author, price, description, stock) VALUES ('The Pragmatic Programmer', 'Andrew Hunt', 34.99, 'Your Journey To Mastery', 15)");
-      db.run("INSERT INTO products (title, author, price, description, stock) VALUES ('Design Patterns', 'Gang of Four', 39.99, 'Elements of Reusable Object-Oriented Software', 8)");
-      db.run("INSERT INTO products (title, author, price, description, stock) VALUES ('Refactoring', 'Martin Fowler', 32.99, 'Improving the Design of Existing Code', 12)");
-      db.run("INSERT INTO products (title, author, price, description, stock) VALUES ('Code Complete', 'Steve McConnell', 44.99, 'A Practical Handbook of Software Construction', 5)");
-    }
-  });
-
-  db.get("SELECT COUNT(*) as count FROM users", (err, row) => {
-    if (row.count === 0) {
-      // Ajouter un utilisateur admin avec mot de passe en clair (MAUVAISE PRATIQUE)
-      db.run("INSERT INTO users (email, password, role) VALUES ('admin@bookstore.com', 'admin123', 'admin')");
-      db.run("INSERT INTO users (email, password, role) VALUES ('user@test.com', 'password', 'user')");
-    }
-  });
+  )
+`, (err) => {
+  if (err) console.log('Error creating products table:', err);
+  else console.log('Products table ready');
+  initClient2.end();
 });
+
+const initClient3 = getDbConnection();
+initClient3.connect();
+initClient3.query(`
+  CREATE TABLE IF NOT EXISTS orders (
+    id SERIAL PRIMARY KEY,
+    user_email TEXT,
+    total DECIMAL(10, 2),
+    status TEXT,
+    created_at TIMESTAMP
+  )
+`, (err) => {
+  if (err) console.log('Error creating orders table:', err);
+  else console.log('Orders table ready');
+  initClient3.end();
+});
+
+// Insérer quelques données de test si la table est vide
+setTimeout(() => {
+  const checkClient = getDbConnection();
+  checkClient.connect();
+  checkClient.query('SELECT COUNT(*) as count FROM products', (err, result) => {
+    if (!err && result.rows[0].count == 0) {
+      console.log('Inserting test data...');
+      // Créer une nouvelle connexion pour chaque insertion (TRÈS MAUVAISE PRATIQUE)
+      const insertClient1 = getDbConnection();
+      insertClient1.connect();
+      insertClient1.query("INSERT INTO products (title, author, price, description, stock) VALUES ('Clean Code', 'Robert C. Martin', 29.99, 'A Handbook of Agile Software Craftsmanship', 10)", () => insertClient1.end());
+      
+      const insertClient2 = getDbConnection();
+      insertClient2.connect();
+      insertClient2.query("INSERT INTO products (title, author, price, description, stock) VALUES ('The Pragmatic Programmer', 'Andrew Hunt', 34.99, 'Your Journey To Mastery', 15)", () => insertClient2.end());
+      
+      const insertClient3 = getDbConnection();
+      insertClient3.connect();
+      insertClient3.query("INSERT INTO products (title, author, price, description, stock) VALUES ('Design Patterns', 'Gang of Four', 39.99, 'Elements of Reusable Object-Oriented Software', 8)", () => insertClient3.end());
+      
+      const insertClient4 = getDbConnection();
+      insertClient4.connect();
+      insertClient4.query("INSERT INTO products (title, author, price, description, stock) VALUES ('Refactoring', 'Martin Fowler', 32.99, 'Improving the Design of Existing Code', 12)", () => insertClient4.end());
+      
+      const insertClient5 = getDbConnection();
+      insertClient5.connect();
+      insertClient5.query("INSERT INTO products (title, author, price, description, stock) VALUES ('Code Complete', 'Steve McConnell', 44.99, 'A Practical Handbook of Software Construction', 5)", () => insertClient5.end());
+    }
+    checkClient.end();
+  });
+
+  const checkUsersClient = getDbConnection();
+  checkUsersClient.connect();
+  checkUsersClient.query('SELECT COUNT(*) as count FROM users', (err, result) => {
+    if (!err && result.rows[0].count == 0) {
+      console.log('Inserting test users...');
+      const insertUserClient1 = getDbConnection();
+      insertUserClient1.connect();
+      insertUserClient1.query("INSERT INTO users (email, password, role) VALUES ('admin@bookstore.com', 'admin123', 'admin')", () => insertUserClient1.end());
+      
+      const insertUserClient2 = getDbConnection();
+      insertUserClient2.connect();
+      insertUserClient2.query("INSERT INTO users (email, password, role) VALUES ('user@test.com', 'password', 'user')", () => insertUserClient2.end());
+    }
+    checkUsersClient.end();
+  });
+}, 1000);
 
 // Fonction utilitaire pour générer un token maison (TRÈS MAUVAISE PRATIQUE)
 function generateToken(email) {
@@ -119,18 +196,30 @@ app.get('/products', (req, res) => {
   var waste = wasteTime();
   
   // SELECT * sans filtre (MAUVAISE PRATIQUE)
-  db.all('SELECT * FROM products', [], (err, rows) => {
-    if (err) {
-      console.log(err);
-      res.status(500).send('Database error');
+  // Créer une nouvelle connexion pour chaque requête (TRÈS MAUVAISE PRATIQUE)
+  const client = getDbConnection();
+  client.connect((connErr) => {
+    if (connErr) {
+      console.log('Connection error:', connErr);
+      res.status(500).send('Database connection error');
       return;
     }
     
-    // setTimeout inutile qui ralentit la réponse (MAUVAISE PRATIQUE)
-    setTimeout(() => {
-      console.log('Returning ' + rows.length + ' products');
-      res.json(rows);
-    }, 500);
+    client.query('SELECT * FROM products', (err, result) => {
+      if (err) {
+        console.log(err);
+        client.end();
+        res.status(500).send('Database error');
+        return;
+      }
+      
+      // setTimeout inutile qui ralentit la réponse (MAUVAISE PRATIQUE)
+      setTimeout(() => {
+        console.log('Returning ' + result.rows.length + ' products');
+        res.json(result.rows);
+        client.end(); // Fermer la connexion (mais c'est déjà trop tard, mauvaise perf)
+      }, 500);
+    });
   });
 });
 
@@ -142,19 +231,24 @@ app.get('/products/:id', (req, res) => {
   // Concaténation directe dans la requête SQL = INJECTION SQL POSSIBLE
   var query = "SELECT * FROM products WHERE id = " + id;
   
-  db.get(query, [], (err, row) => {
+  // Nouvelle connexion pour chaque requête (MAUVAISE PRATIQUE)
+  const client = getDbConnection();
+  client.connect();
+  client.query(query, (err, result) => {
     if (err) {
       console.log('Error:', err);
       // Renvoyer la stack trace dans la réponse (MAUVAISE PRATIQUE)
       res.status(500).json({ error: err.message, stack: err.stack });
+      client.end();
       return;
     }
     
-    if (row) {
-      res.json(row);
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]);
     } else {
       res.status(404).send('Product not found');
     }
+    client.end();
   });
 });
 
@@ -169,16 +263,23 @@ app.post('/register', (req, res) => {
   // Pas de vérification si l'utilisateur existe déjà
   
   // Stockage du mot de passe en clair (TRÈS MAUVAISE PRATIQUE)
-  db.run("INSERT INTO users (email, password, role) VALUES (?, ?, 'user')", [email, password], function(err) {
-    if (err) {
-      console.log(err);
-      res.status(400).send('Registration failed');
-      return;
+  const client = getDbConnection();
+  client.connect();
+  client.query("INSERT INTO users (email, password, role) VALUES ($1, $2, 'user') RETURNING id", 
+    [email, password], 
+    (err, result) => {
+      if (err) {
+        console.log(err);
+        res.status(400).send('Registration failed');
+        client.end();
+        return;
+      }
+      
+      console.log('User registered: ' + email);
+      res.json({ message: 'User registered successfully', userId: result.rows[0].id });
+      client.end();
     }
-    
-    console.log('User registered: ' + email);
-    res.json({ message: 'User registered successfully', userId: this.lastID });
-  });
+  );
 });
 
 // Login - authentification non sécurisée
@@ -191,31 +292,39 @@ app.post('/login', (req, res) => {
   // Pas de limite de tentatives (vulnérable au brute force)
   
   // Requête avec SELECT * (MAUVAISE PRATIQUE)
-  db.get("SELECT * FROM users WHERE email = ? AND password = ?", [email, password], (err, row) => {
-    if (err) {
-      console.log(err);
-      res.status(500).send('Error');
-      return;
-    }
-    
-    if (row) {
-      // Générer un token maison non sécurisé (MAUVAISE PRATIQUE)
-      var token = generateToken(email);
-      connectedUsers.push(email);
+  const client = getDbConnection();
+  client.connect();
+  client.query("SELECT * FROM users WHERE email = $1 AND password = $2", 
+    [email, password], 
+    (err, result) => {
+      if (err) {
+        console.log(err);
+        res.status(500).send('Error');
+        client.end();
+        return;
+      }
       
-      console.log('Login successful for ' + email);
-      console.log('Connected users:', connectedUsers);
-      
-      res.json({ 
-        message: 'Login successful', 
-        token: token,
-        user: row // Renvoyer toutes les données utilisateur y compris le mot de passe (MAUVAISE PRATIQUE)
-      });
-    } else {
-      console.log('Login failed for ' + email);
-      res.status(401).send('Invalid credentials');
+      if (result.rows.length > 0) {
+        var row = result.rows[0];
+        // Générer un token maison non sécurisé (MAUVAISE PRATIQUE)
+        var token = generateToken(email);
+        connectedUsers.push(email);
+        
+        console.log('Login successful for ' + email);
+        console.log('Connected users:', connectedUsers);
+        
+        res.json({ 
+          message: 'Login successful', 
+          token: token,
+          user: row // Renvoyer toutes les données utilisateur y compris le mot de passe (MAUVAISE PRATIQUE)
+        });
+      } else {
+        console.log('Login failed for ' + email);
+        res.status(401).send('Invalid credentials');
+      }
+      client.end();
     }
-  });
+  );
 });
 
 // Ajouter au panier - stockage en mémoire volatile
@@ -236,17 +345,24 @@ app.post('/cart/add', (req, res) => {
   // Pas de validation de la quantité (MAUVAISE PRATIQUE)
   
   // Requête N+1 : on fait une requête pour chaque produit (MAUVAISE PRATIQUE)
-  db.get("SELECT * FROM products WHERE id = " + productId, [], (err, product) => {
+  // Et injection SQL possible (MAUVAISE PRATIQUE)
+  const client = getDbConnection();
+  client.connect();
+  client.query("SELECT * FROM products WHERE id = " + productId, (err, result) => {
     if (err) {
       console.log(err);
       res.status(500).send('Error');
+      client.end();
       return;
     }
     
-    if (!product) {
+    if (result.rows.length === 0) {
       res.status(404).send('Product not found');
+      client.end();
       return;
     }
+    
+    var product = result.rows[0];
     
     // Initialiser le panier si nécessaire
     if (!userCarts[email]) {
@@ -264,6 +380,7 @@ app.post('/cart/add', (req, res) => {
     console.log('Cart for ' + email + ':', userCarts[email]);
     
     res.json({ message: 'Product added to cart', cart: userCarts[email] });
+    client.end();
   });
 });
 
@@ -291,12 +408,16 @@ app.get('/cart', (req, res) => {
   }
   
   cart.forEach(function(item) {
-    db.get("SELECT * FROM products WHERE id = " + item.productId, [], (err, product) => {
+    // Nouvelle connexion pour chaque item (MAUVAISE PRATIQUE)
+    const client = getDbConnection();
+    client.connect();
+    client.query("SELECT * FROM products WHERE id = " + item.productId, (err, result) => {
       if (err) {
         console.log(err);
       }
       
-      if (product) {
+      if (result && result.rows.length > 0) {
+        var product = result.rows[0];
         detailedCart.push({
           ...item,
           currentStock: product.stock
@@ -304,11 +425,12 @@ app.get('/cart', (req, res) => {
       }
       
       processed++;
+      client.end();
       
       if (processed === cart.length) {
         var total = 0;
         detailedCart.forEach(function(item) {
-          total += item.price * item.quantity;
+          total += parseFloat(item.price) * item.quantity;
         });
         
         res.json({ cart: detailedCart, total: total });
@@ -338,18 +460,22 @@ app.post('/admin/products', (req, res) => {
   
   // Aucune validation des données (MAUVAISE PRATIQUE)
   
-  db.run(
-    "INSERT INTO products (title, author, price, description, stock) VALUES (?, ?, ?, ?, ?)",
+  const client = getDbConnection();
+  client.connect();
+  client.query(
+    "INSERT INTO products (title, author, price, description, stock) VALUES ($1, $2, $3, $4, $5) RETURNING id",
     [title, author, price, description, stock],
-    function(err) {
+    (err, result) => {
       if (err) {
         console.log(err);
         res.status(500).send('Error creating product');
+        client.end();
         return;
       }
       
-      console.log('Product created with id: ' + this.lastID);
-      res.json({ message: 'Product created', productId: this.lastID });
+      console.log('Product created with id: ' + result.rows[0].id);
+      res.json({ message: 'Product created', productId: result.rows[0].id });
+      client.end();
     }
   );
 });
@@ -380,10 +506,12 @@ app.post('/payment', (req, res) => {
     console.log('Payment successful for ' + email);
     
     // Enregistrer la commande
-    db.run(
-      "INSERT INTO orders (user_email, total, status, created_at) VALUES (?, ?, 'paid', ?)",
-      [email, amount, new Date().toISOString()],
-      function(err) {
+    const client = getDbConnection();
+    client.connect();
+    client.query(
+      "INSERT INTO orders (user_email, total, status, created_at) VALUES ($1, $2, 'paid', NOW()) RETURNING id",
+      [email, amount],
+      (err, result) => {
         if (err) {
           console.log(err);
         }
@@ -396,6 +524,7 @@ app.post('/payment', (req, res) => {
           orderId: orderId,
           chargedAmount: amount 
         });
+        client.end();
       }
     );
   }, 1000);
@@ -419,19 +548,23 @@ app.get('/user/:email', (req, res) => {
   console.log('Getting user: ' + email);
   
   // Même logique que dans login mais dupliquée (MAUVAISE PRATIQUE)
-  db.get("SELECT * FROM users WHERE email = ?", [email], (err, row) => {
+  const client = getDbConnection();
+  client.connect();
+  client.query("SELECT * FROM users WHERE email = $1", [email], (err, result) => {
     if (err) {
       console.log(err);
       res.status(500).send('Error');
+      client.end();
       return;
     }
     
-    if (row) {
+    if (result.rows.length > 0) {
       // Renvoyer toutes les données y compris le mot de passe (MAUVAISE PRATIQUE)
-      res.json(row);
+      res.json(result.rows[0]);
     } else {
       res.status(404).send('User not found');
     }
+    client.end();
   });
 });
 
