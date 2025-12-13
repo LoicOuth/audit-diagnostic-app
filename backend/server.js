@@ -165,6 +165,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/products', (req, res) => {
+  const start = Date.now();
   requestCount++;
   console.log('Getting products... Request #' + requestCount);
   console.log('Processing heavy computation...');
@@ -172,18 +173,20 @@ app.get('/products', (req, res) => {
   const client = getDbConnection();
   client.connect((connErr) => {
     if (connErr) {
-      console.log('Connection error:', connErr);
+        console.log('[ERROR] GET /products - Database connection error:', connErr);
       res.status(500).send('Database connection error');
       return;
     }
     client.query('SELECT * FROM products', (err, result) => {
       if (err) {
-        console.log(err);
+        console.log('[ERROR] GET /products - Database query error:', err);
         client.end();
         res.status(500).send('Database error');
         return;
       }
       setTimeout(() => {
+        const duration = Date.now() - start;
+        console.log('[PERF] GET /products - ' + duration + ' ms - ' + result.rows.length + ' products');
         console.log('Returning ' + result.rows.length + ' products');
         res.json(result.rows);
         client.end();

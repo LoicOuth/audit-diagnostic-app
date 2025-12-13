@@ -244,13 +244,16 @@
 </template>
 
 <script>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUpdated } from 'vue'
 
 export default {
   name: 'App',
   
   setup() {
     console.log('Setup function called')
+    
+    // Compteur de rerenders pour la page produits
+    const renderCount = ref(0);
     
     // Variables d'état mélangées sans organisation claire
     const currentPage = ref('products')
@@ -299,6 +302,11 @@ export default {
       
       console.log('Initial load complete')
     })
+
+    onUpdated(() => {
+      renderCount.value++;
+      console.log('[RENDER] App updated - render count =', renderCount.value);
+   });
 
     // Computed property lourde avec calculs inutiles (MAUVAISE PRATIQUE)
     const cartItemCount = computed(() => {
@@ -354,6 +362,7 @@ export default {
 
     // Fonction pour charger les produits (appel API dupliqué partout)
     function loadProducts() {
+      const start = performance.now();
       console.log('Loading products...')
       console.log('Fetching from:', API_URL + '/products')
       
@@ -368,6 +377,8 @@ export default {
         .then(data => {
           console.log('Products data:', data)
           products.value = data
+          const duration = performance.now() - start;
+          console.log('[PERF-FRONT] loadProducts - ' + Math.round(duration) + ' ms');
           console.log('Products loaded successfully')
         })
         .catch(error => {
