@@ -2,4 +2,5 @@ node_modules/
 bookstore.db
 bookstore.db-journal
 *.log
+logs/
 .DS_Store

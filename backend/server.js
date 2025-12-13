@@ -2,6 +2,22 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { Client } = require('pg');
+const pino = require('pino');
+const fs = require('fs');
+
+// Créer un dossier logs si besoin
+if (!fs.existsSync('./logs')) {
+  fs.mkdirSync('./logs');
+}
+
+const logStream = fs.createWriteStream('./logs/app.log', { flags: 'a' });
+
+const logger = pino(
+  {
+    level: process.env.LOG_LEVEL || 'info'
+  },
+  logStream
+);
 
 const app = express();
 const PORT = 3000;
@@ -79,6 +95,24 @@ initClient3.query(`
   initClient3.end();
 });
 
+const initClientLogs = getDbConnection();
+initClientLogs.connect();
+initClientLogs.query(`
+  CREATE TABLE IF NOT EXISTS request_logs (
+    id SERIAL PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT NOW(),
+    route TEXT,
+    method TEXT,
+    status_code INTEGER,
+    duration_ms INTEGER,
+    error_message TEXT
+  )
+`, (err) => {
+  if (err) console.log('Error creating request_logs table:', err);
+  else console.log('request_logs table ready');
+  initClientLogs.end();
+});
+
 setTimeout(() => {
   const checkClient = getDbConnection();
   checkClient.connect();
@@ -151,25 +185,100 @@ app.get('/', (req, res) => {
 app.get('/products', (req, res) => {
   const start = Date.now();
   requestCount++;
+  logger.info({ route: 'GET /products' }, 'Handling /products request');
   var waste = wasteTime();
   const client = getDbConnection();
   client.connect((connErr) => {
     if (connErr) {
-        console.log('[ERROR] GET /products - Database connection error:', connErr);
+      console.log('[ERROR] GET /products - Database connection error:', connErr);
+      const duration = Date.now() - start;
+      
+      // Log dans request_logs
+      const logClient = getDbConnection();
+      logClient.connect();
+      logClient.query(
+        'INSERT INTO request_logs (route, method, status_code, duration_ms, error_message) VALUES ($1, $2, $3, $4, $5)',
+        ['/products', 'GET', 500, duration, connErr.message],
+        (logErr) => {
+          if (logErr) {
+            console.log('Error inserting request_log:', logErr);
+            logger.error({ route: 'GET /products', err: logErr }, 'Failed to insert request_log (connection error)');
+          }
+          logClient.end();
+        }
+      );
+      
+      logger.error({
+        route: 'GET /products',
+        duration_ms: duration,
+        error: connErr.message
+      }, 'GET /products connection failed');
+      
       res.status(500).send('Database connection error');
       return;
     }
     client.query('SELECT * FROM products', (err, result) => {
       if (err) {
         console.log('[ERROR] GET /products - Database query error:', err);
+        const duration = Date.now() - start;
+        
+        // Log dans request_logs
+        const logClient = getDbConnection();
+        logClient.connect();
+        logClient.query(
+          'INSERT INTO request_logs (route, method, status_code, duration_ms, error_message) VALUES ($1, $2, $3, $4, $5)',
+          ['/products', 'GET', 500, duration, err.message],
+          (logErr) => {
+            if (logErr) {
+              console.log('Error inserting request_log:', logErr);
+              logger.error({ route: 'GET /products', err: logErr }, 'Failed to insert request_log (error case)');
+            }
+            logClient.end();
+          }
+        );
+        
+        logger.error({
+          route: 'GET /products',
+          duration_ms: duration,
+          error: err.message
+        }, 'GET /products failed');
+        
         client.end();
         res.status(500).send('Database error');
         return;
       }
       setTimeout(() => {
         const duration = Date.now() - start;
+        
+        // Log dans request_logs
+        const logClient = getDbConnection();
+        logClient.connect();
+        logClient.query(
+          'INSERT INTO request_logs (route, method, status_code, duration_ms, error_message) VALUES ($1, $2, $3, $4, $5)',
+          ['/products', 'GET', 200, duration, null],
+          (logErr) => {
+            if (logErr) {
+              console.log('Error inserting request_log:', logErr);
+              logger.error({ route: 'GET /products', err: logErr }, 'Failed to insert request_log');
+            }
+            logClient.end();
+          }
+        );
+        
+        logger.info({
+          route: 'GET /products',
+          duration_ms: duration,
+          products: result.rows.length
+        }, 'GET /products completed');
+        
         console.log('[PERF] GET /products - ' + duration + ' ms - ' + result.rows.length + ' products');
         console.log('Returning ' + result.rows.length + ' products');
+        
+        logger.info({
+          route: 'GET /products',
+          products: result.rows.length
+        }, 'Products fetched successfully');
+        
         res.json(result.rows);
         client.end();
       }, 500);

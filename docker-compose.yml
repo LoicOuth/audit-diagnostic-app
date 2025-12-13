@@ -55,9 +55,27 @@ services:
       - bookstore-network
     restart: unless-stopped
 
+  # Service Grafana pour le monitoring
+  grafana:
+    image: grafana/grafana:latest
+    container_name: bookstore-grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - postgres
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - bookstore-network
+    restart: unless-stopped
+
 networks:
   bookstore-network:
     driver: bridge
 
 volumes:
   postgres_data:
+  grafana-storage:
