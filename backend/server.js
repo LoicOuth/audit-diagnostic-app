@@ -21,8 +21,6 @@ const dbConfig = {
   password: process.env.DB_PASSWORD || 'bookstore_pass',
 };
 
-console.log('PostgreSQL config loaded');
-
 function getDbConnection() {
   const client = new Client(dbConfig);
   return client;
@@ -31,14 +29,9 @@ function getDbConnection() {
 const testClient = getDbConnection();
 testClient.connect((err) => {
   if (err) {
-    console.log('Error connecting to database:', err);
     testClient.end();
   } else {
-    console.log('Database connection test successful');
     testClient.query('SELECT NOW()', (err, res) => {
-      if (!err) {
-        console.log('Database connected at:', res.rows[0].now);
-      }
       testClient.end();
     });
   }
@@ -54,8 +47,6 @@ initClient1.query(`
     role TEXT
   )
 `, (err) => {
-  if (err) console.log('Error creating users table:', err);
-  else console.log('Users table ready');
   initClient1.end();
 });
 
@@ -71,8 +62,6 @@ initClient2.query(`
     stock INTEGER
   )
 `, (err) => {
-  if (err) console.log('Error creating products table:', err);
-  else console.log('Products table ready');
   initClient2.end();
 });
 
@@ -87,8 +76,6 @@ initClient3.query(`
     created_at TIMESTAMP
   )
 `, (err) => {
-  if (err) console.log('Error creating orders table:', err);
-  else console.log('Orders table ready');
   initClient3.end();
 });
 
@@ -97,7 +84,6 @@ setTimeout(() => {
   checkClient.connect();
   checkClient.query('SELECT COUNT(*) as count FROM products', (err, result) => {
     if (!err && result.rows[0].count == 0) {
-      console.log('Inserting test data...');
       const insertClient1 = getDbConnection();
       insertClient1.connect();
       insertClient1.query("INSERT INTO products (title, author, price, description, stock) VALUES ('Clean Code', 'Robert C. Martin', 29.99, 'A Handbook of Agile Software Craftsmanship', 10)", () => insertClient1.end());
@@ -125,7 +111,6 @@ setTimeout(() => {
   checkUsersClient.connect();
   checkUsersClient.query('SELECT COUNT(*) as count FROM users', (err, result) => {
     if (!err && result.rows[0].count == 0) {
-      console.log('Inserting test users...');
       const insertUserClient1 = getDbConnection();
       insertUserClient1.connect();
       insertUserClient1.query("INSERT INTO users (email, password, role) VALUES ('admin@bookstore.com', 'admin123', 'admin')", () => insertUserClient1.end());
@@ -160,31 +145,25 @@ function wasteTime() {
 }
 
 app.get('/', (req, res) => {
-  console.log('Someone accessed the home route');
   res.send('Welcome to the Bookstore API');
 });
 
 app.get('/products', (req, res) => {
   requestCount++;
-  console.log('Getting products... Request #' + requestCount);
-  console.log('Processing heavy computation...');
   var waste = wasteTime();
   const client = getDbConnection();
   client.connect((connErr) => {
     if (connErr) {
-      console.log('Connection error:', connErr);
       res.status(500).send('Database connection error');
       return;
     }
     client.query('SELECT * FROM products', (err, result) => {
       if (err) {
-        console.log(err);
         client.end();
         res.status(500).send('Database error');
         return;
       }
       setTimeout(() => {
-        console.log('Returning ' + result.rows.length + ' products');
         res.json(result.rows);
         client.end();
       }, 500);
@@ -194,13 +173,11 @@ app.get('/products', (req, res) => {
 
 app.get('/products/:id', (req, res) => {
   var id = req.params.id;
-  console.log('Getting product with id: ' + id);
   var query = "SELECT * FROM products WHERE id = " + id;
   const client = getDbConnection();
   client.connect();
   client.query(query, (err, result) => {
     if (err) {
-      console.log('Error:', err);
       res.status(500).json({ error: err.message, stack: err.stack });
       client.end();
       return;
@@ -217,19 +194,16 @@ app.get('/products/:id', (req, res) => {
 app.post('/register', (req, res) => {
   var email = req.body.email;
   var password = req.body.password;
-  console.log('New registration attempt');
   const client = getDbConnection();
   client.connect();
   client.query("INSERT INTO users (email, password, role) VALUES ($1, $2, 'user') RETURNING id", 
     [email, password], 
     (err, result) => {
       if (err) {
-        console.log(err);
         res.status(400).send('Registration failed');
         client.end();
         return;
       }
-      console.log('User registered: ' + email);
       res.json({ message: 'User registered successfully', userId: result.rows[0].id });
       client.end();
     }
@@ -239,14 +213,12 @@ app.post('/register', (req, res) => {
 app.post('/login', (req, res) => {
   var email = req.body.email;
   var password = req.body.password;
-  console.log('Login attempt for: ' + email);
   const client = getDbConnection();
   client.connect();
   client.query("SELECT * FROM users WHERE email = $1 AND password = $2", 
     [email, password], 
     (err, result) => {
       if (err) {
-        console.log(err);
         res.status(500).send('Error');
         client.end();
         return;
@@ -255,15 +227,12 @@ app.post('/login', (req, res) => {
         var row = result.rows[0];
         var token = generateToken(email);
         connectedUsers.push(email);
-        console.log('Login successful for ' + email);
-        console.log('Connected users:', connectedUsers);
         res.json({ 
           message: 'Login successful', 
           token: token,
           user: row
         });
       } else {
-        console.log('Login failed for ' + email);
         res.status(401).send('Invalid credentials');
       }
       client.end();
@@ -275,7 +244,6 @@ app.post('/cart/add', (req, res) => {
   var token = req.headers.authorization;
   var productId = req.body.productId;
   var quantity = req.body.quantity;
-  console.log('Adding to cart...');
   var email = verifyToken(token);
   if (!email) {
     res.status(401).send('Unauthorized');
@@ -285,7 +253,6 @@ app.post('/cart/add', (req, res) => {
   client.connect();
   client.query("SELECT * FROM products WHERE id = " + productId, (err, result) => {
     if (err) {
-      console.log(err);
       res.status(500).send('Error');
       client.end();
       return;
@@ -305,7 +272,6 @@ app.post('/cart/add', (req, res) => {
       price: product.price,
       title: product.title
     });
-    console.log('Cart for ' + email + ':', userCarts[email]);
     res.json({ message: 'Product added to cart', cart: userCarts[email] });
     client.end();
   });
@@ -313,7 +279,6 @@ app.post('/cart/add', (req, res) => {
 
 app.get('/cart', (req, res) => {
   var token = req.headers.authorization;
-  console.log('Getting cart...');
   var email = verifyToken(token);
   if (!email) {
     res.status(401).send('Unauthorized');
@@ -330,9 +295,6 @@ app.get('/cart', (req, res) => {
     const client = getDbConnection();
     client.connect();
     client.query("SELECT * FROM products WHERE id = " + item.productId, (err, result) => {
-      if (err) {
-        console.log(err);
-      }
       if (result && result.rows.length > 0) {
         var product = result.rows[0];
         detailedCart.push({
@@ -356,7 +318,6 @@ app.get('/cart', (req, res) => {
 app.post('/admin/products', (req, res) => {
   var token = req.headers.authorization;
   var role = req.body.role;
-  console.log('Admin route accessed');
   if (role !== 'admin') {
     res.status(403).send('Forbidden - Admin only');
     return;
@@ -373,12 +334,10 @@ app.post('/admin/products', (req, res) => {
     [title, author, price, description, stock],
     (err, result) => {
       if (err) {
-        console.log(err);
         res.status(500).send('Error creating product');
         client.end();
         return;
       }
-      console.log('Product created with id: ' + result.rows[0].id);
       res.json({ message: 'Product created', productId: result.rows[0].id });
       client.end();
     }
@@ -389,25 +348,26 @@ app.post('/payment', (req, res) => {
   var token = req.headers.authorization;
   var cardNumber = req.body.cardNumber;
   var amount = req.body.amount;
-  console.log('Payment attempt');
-  console.log('Card number:', cardNumber);
   var email = verifyToken(token);
   if (!email) {
     res.status(401).send('Unauthorized');
     return;
   }
+  
+  // Simuler une erreur aléatoire (MAUVAISE PRATIQUE pour montrer l'instabilité)
+  if (Math.random() < 0.3) {
+    res.status(500).json({ error: 'Payment gateway timeout' });
+    return;
+  }
+  
   setTimeout(function() {
     var orderId = Math.random().toString(36).substring(7);
-    console.log('Payment successful for ' + email);
     const client = getDbConnection();
     client.connect();
     client.query(
       "INSERT INTO orders (user_email, total, status, created_at) VALUES ($1, $2, 'paid', NOW()) RETURNING id",
       [email, amount],
       (err, result) => {
-        if (err) {
-          console.log(err);
-        }
         userCarts[email] = [];
         res.json({ 
           message: 'Payment successful', 
@@ -432,12 +392,10 @@ app.get('/debug', (req, res) => {
 
 app.get('/user/:email', (req, res) => {
   var email = req.params.email;
-  console.log('Getting user: ' + email);
   const client = getDbConnection();
   client.connect();
   client.query("SELECT * FROM users WHERE email = $1", [email], (err, result) => {
     if (err) {
-      console.log(err);
       res.status(500).send('Error');
       client.end();
       return;
@@ -453,5 +411,4 @@ app.get('/user/:email', (req, res) => {
 
 app.listen(PORT, () => {
   console.log('Server is running on port ' + PORT);
-  console.log('Environment: ' + (process.env.NODE_ENV || 'development'));
 });
