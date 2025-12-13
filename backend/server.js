@@ -494,6 +494,11 @@ app.post('/payment', (req, res) => {
     res.status(401).send('Unauthorized');
     return;
   }
+
+  if (Math.random() < 0.3) {
+    res.status(500).json({ error: 'Payment gateway timeout' });
+    return;
+  }
   
   // Pas de validation du numéro de carte (MAUVAISE PRATIQUE)
   // Pas de vérification du montant (MAUVAISE PRATIQUE)
